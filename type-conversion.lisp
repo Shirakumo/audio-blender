@@ -85,7 +85,7 @@
   (declare (type single-float a))
   (sf! (clamp -1.0s0 a 1.0s0)))
 
-(defun ensure-ctype (ltype)
+(defun ensure-ctypename (ltype)
   (cond ((keywordp ltype)
          ltype)
         ((not (listp ltype))
@@ -103,29 +103,92 @@
            (16 :int16)
            (32 :int32)))
         (T
-         (error "Cannot convert ~s to ctype." ltype))))
+         (error "Cannot convert ~s to ctypename." ltype))))
 
-(defun c-converter (val from to)
-  (when (not (or (eql from :float) (eql to :float)))
-    (error "Don't know how to convert from ~a to ~a." from to))
+(defun coerce-ctype (val from to)
   (ecase from
     (:float
      (case to
-       (:float  `(float->fl ,val))
-       (:double `(coerce (the double-float ,val) 'single-float))
-       (:uint8  `(float->ub ,val 8))
-       (:uint16 `(float->ub ,val 16))
-       (:uint32 `(float->ub ,val 32))
-       (:int8   `(float->sb ,val 8))
-       (:int16  `(float->sb ,val 16))
-       (:int32  `(float->sb ,val 32))))
-    (:double `(coerce (the double-float ,val) 'single-float))
-    (:uint8  `(ub->float ,val 8))
-    (:uint16 `(ub->float ,val 16))
-    (:uint32 `(ub->float ,val 32))
-    (:int8   `(sb->float ,val 8))
-    (:int16  `(sb->float ,val 16))
-    (:int32  `(sb->float ,val 32))))
+       (:float  (float->fl val))
+       (:double (coerce (the double-float val) 'single-float))
+       (:uint8  (float->ub val 8))
+       (:uint16 (float->ub val 16))
+       (:uint32 (float->ub val 32))
+       (:int8   (float->sb val 8))
+       (:int16  (float->sb val 16))
+       (:int32  (float->sb val 32))))
+    (:double
+     (case to
+       (:float (coerce (the double-float val) 'single-float))
+       (T (coerce-ctype (coerce-ctype val :double :float) :float to))))
+    (:uint8
+     (case to
+       (:float (ub->float val 8))
+       (T (coerce-ctype (coerce-ctype val :uint8 :float) :float to))))
+    (:uint16
+     (case to
+       (:float (ub->float val 16))
+       (T (coerce-ctype (coerce-ctype val :uint16 :float) :float to))))
+    (:uint32
+     (case to
+       (:float (ub->float val 32))
+       (T (coerce-ctype (coerce-ctype val :uint32 :float) :float to))))
+    (:int8
+     (case to
+       (:float (sb->float val 8))
+       (T (coerce-ctype (coerce-ctype val :int8 :float) :float to))))
+    (:int16
+     (case to
+       (:float (sb->float val 16))
+       (T (coerce-ctype (coerce-ctype val :int16 :float) :float to))))
+    (:int32
+     (case to
+       (:float (sb->float val 32))
+       (T (coerce-ctype (coerce-ctype val :int32 :float) :float to))))))
+
+(define-compiler-macro coerce-ctype (&whole whole &environment env val from to)
+  (cond ((and (constantp from env) (constantp to env))
+         (ecase from
+           (:float
+            (case to
+              (:float  `(float->fl ,val))
+              (:double `(coerce (the double-float ,val) 'single-float))
+              (:uint8  `(float->ub ,val 8))
+              (:uint16 `(float->ub ,val 16))
+              (:uint32 `(float->ub ,val 32))
+              (:int8   `(float->sb ,val 8))
+              (:int16  `(float->sb ,val 16))
+              (:int32  `(float->sb ,val 32))))
+           (:double
+            (case to
+              (:float `(coerce (the double-float ,val) 'single-float))
+              (T `(coerce-ctype (coerce-ctype ,val :double :float) :float to))))
+           (:uint8
+            (case to
+              (:float `(ub->float ,val 8))
+              (T `(coerce-ctype (coerce-ctype ,val :uint8 :float) :float to))))
+           (:uint16
+            (case to
+              (:float `(ub->float ,val 16))
+              (T `(coerce-ctype (coerce-ctype ,val :uint16 :float) :float to))))
+           (:uint32
+            (case to
+              (:float `(ub->float ,val 32))
+              (T `(coerce-ctype (coerce-ctype ,val :uint32 :float) :float to))))
+           (:int8
+            (case to
+              (:float `(sb->float ,val 8))
+              (T `(coerce-ctype (coerce-ctype ,val :int8 :float) :float to))))
+           (:int16
+            (case to
+              (:float `(sb->float ,val 16))
+              (T `(coerce-ctype (coerce-ctype ,val :int16 :float) :float to))))
+           (:int32
+            (case to
+              (:float `(sb->float ,val 32))
+              (T `(coerce-ctype (coerce-ctype ,val :int32 :float) :float to))))))
+        (T
+         whole)))
 
 (deftype c-array (type)
   (declare (ignore type))
