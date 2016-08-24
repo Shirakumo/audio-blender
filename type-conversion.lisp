@@ -193,3 +193,11 @@
 (deftype c-array (type)
   (declare (ignore type))
   'cffi:foreign-pointer)
+
+(defun ctype-zero (ctype)
+  (case ctype
+    (:float 0.0s0) (:double 0.0d0)
+    ((:int8 :int16 :int32) 0)
+    (:uint8 #x80)
+    (:uint16 #x8000)
+    (:uint32 #x80000000)))

@@ -32,7 +32,8 @@
   (let ((eltype (ensure-ctype (second type))))
     (c-converter eltype :float (case (first type)
                                  (c-array `(cffi:mem-aref ,channel ,eltype ,i))
-                                 (vector `(aref ,channel ,i))))))
+                                 (vector `(aref ,channel ,i))
+                                 (function `(funcall ,channel ,i))))))
 
 (defmacro set-channel-aref (channel type i var)
   (let ((eltype (ensure-ctype (second type))))

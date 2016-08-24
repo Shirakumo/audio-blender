@@ -15,8 +15,8 @@
   :serial T
   :components ((:file "package")
                (:file "type-conversion")
-               (:file "mixer")
-               (:file "audio-blender")
+               (:file "channel")
+               
                (:file "documentation"))
   :depends-on (:cffi
                :trivial-features
