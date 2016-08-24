@@ -19,4 +19,6 @@
                (:file "documentation"))
   :depends-on (:cffi
                :trivial-features
+               :trivial-garbage
+               :bordeaux-threads
                :documentation-utils))
