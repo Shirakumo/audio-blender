@@ -33,7 +33,15 @@
    :buffer-fill 0))
 
 (defmethod refresh :around ((channel buffer-channel) max)
-  (setf (buffer-fill channel) (call-next-method)))
+  (declare (optimize speed))
+  (let ((prev (the fixnum (buffer-fill channel)))
+        (new (the fixnum (call-next-method))))
+    ;; Backfill with zeroes.
+    (when (< new prev)
+      (loop with zero = (ctype-zero (sample-type channel))
+            for i from new below prev
+            do (setf (sample channel i) zero)))
+    (setf (buffer-fill channel) new)))
 
 (defgeneric buffer-size (channel))
 
@@ -50,7 +58,7 @@
       (tg:finalize channel (lambda () (cffi:foreign-free buffer))))))
 
 (defmethod sample ((channel c-array-channel) pos)
-  (declare (type fixnum pos))
+  (declare (type fixnum pos) (optimize speed))
   (cffi:mem-aref (the cffi:foreign-pointer (buffer channel)) (sample-type channel) pos))
 
 (defmethod (setf sample) (sample (channel c-array-channel) pos)
@@ -77,51 +85,73 @@
    :reader (error "READER required.")))
 
 (defmethod refresh ((channel reading-channel) max)
+  (declare (type fixnum max))
   (funcall (the function (reader channel))
            (buffer channel)
-           (min max (buffer-size channel))))
+           (min max (the fixnum (buffer-size channel)))))
 
 (defclass aggregate-channel (vector-channel)
   ((channels :accessor channels))
   (:default-initargs
-   :buffer (make-array 0 :adjustable T)))
+   :buffer (make-array 0 :element-type 'single-float :initial-element 0.0s0 :adjustable T)))
 
 (defmethod initialize-instance :after ((channel aggregate-channel) &key channels)
   (setf (channels channel) (coerce channels 'vector)))
 
-(defmethod mix ((aggregate aggregate-channel))
+(defmethod mix ((aggregate aggregate-channel) max)
+  (declare (optimize speed))
+  (declare (type fixnum max))
   (let* ((buffer (buffer aggregate))
-         (length (length (channels aggregate))))
-    (dolist (i (buffer-size aggregate) buffer)
+         (channels (channels aggregate)))
+    (declare (type (vector single-float) buffer))
+    (declare (type simple-vector channels))
+    (dolist (i max buffer)
+      (declare (type fixnum i))
       (setf (aref buffer i)
-            (loop for channel across (channels aggregate)
-                  summing (/ (sample channel i) length))))))
+            (/ (let ((sum 0.0s0))
+                 (declare (type single-float sum))
+                 (dotimes (j (length channels) sum)
+                   (incf sum (sf! (sample (aref channels j) i)))))
+               (coerce (length channels) 'single-float))))))
 
 (defmethod refresh ((aggregate aggregate-channel) max)
-  (case (length (channels aggregate))
-    (0 0)
-    (T (loop for channel across (channels aggregate)
-             for size = (refresh channel max)
-             do (when (< size max)
-                  ;; Backfill with zeros.
-                  (loop with zero = (ctype-zero (sample-type channel))
-                        for i from size below max
-                        do (setf (sample channel i) zero))
-                  ;; Remove from channels.
-                  (remove-channel channel aggregate)))
-     (mix aggregate)
-     max)))
+  (declare (optimize speed))
+  (let ((channels (channels aggregate)))
+    (declare (type simple-vector channels))
+    (case (length channels)
+      (0 0)
+      (T (loop for channel across channels
+               for size = (the fixnum (refresh channel max))
+               do (when (= 0 size)
+                    (remove-channel channel aggregate)))
+       (mix aggregate max)
+       max))))
 
 (defmethod remove-channel ((channel channel) (aggregate aggregate-channel))
-  (setf (channels aggregate) (remove channel (channels aggregate)))
+  (let ((channels (remove channel (channels aggregate))))
+    ;; Adjust buffer if necessary
+    (when (= (buffer-size aggregate)
+             (buffer-size channel))
+      (adjust-array (buffer aggregate)
+                    (loop for c across channels minimize (buffer-size c))
+                    :initial-element 0.0s0))
+    (setf (channels aggregate) channels))
   aggregate)
 
 (defmethod add-channel ((channel channel) (aggregate aggregate-channel))
   (let ((original (channels aggregate)))
     (unless (find channel original)
       (let ((channels (make-array (1+ (length original)))))
+        ;; Refill the array
         (dotimes (i (length original))
           (setf (aref channels (1+ i)) (aref original i)))
         (setf (aref channels 0) channel)
+        ;; Adjust buffer if necessary
+        (when (< (buffer-size aggregate)
+                 (buffer-size channel))
+          (adjust-array (buffer aggregate)
+                        (loop for c across channels minimize (buffer-size c))
+                        :initial-element 0.0s0))
+        ;; Publish
         (setf (channels aggregate) channels))))
   aggregate)
