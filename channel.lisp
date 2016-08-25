@@ -100,8 +100,9 @@
   (:default-initargs
    :buffer (make-array 0 :element-type 'single-float :initial-element 0.0s0 :adjustable T)))
 
-(defmethod initialize-instance :after ((channel aggregate-channel) &key channels)
-  (setf (channels channel) (coerce channels 'vector)))
+(defmethod initialize-instance :after ((aggregate aggregate-channel) &key channels)
+  (dolist (channel channels)
+    (add-channel channel aggregate)))
 
 (defmethod mix ((aggregate aggregate-channel) max)
   (declare (optimize speed))

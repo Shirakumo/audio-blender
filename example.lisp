@@ -10,7 +10,7 @@
   (:use #:cl))
 (in-package #:org.shirakumo.fraf.audio-blender.example)
 
-(audio-blender::define-mixer test (a b) (vol)
+(audio-blender::define-mixer test (a) (vol)
   (audio-blender::amp vol a))
 
 (defclass mpg-channel (audio-blender::channel)
@@ -73,14 +73,15 @@
          (chn-b (make-instance 'mpg-channel :path file-b))
          (chn-o (make-instance 'out-channel :driver output-driver
                                             :buffer-size (audio-blender::buffer-size chn-a)))
-         (mixer (audio-blender::make-mixer 'test chn-o chn-a chn-b)))
+         (chn-g (make-instance 'audio-blender::aggregate-channel :channels (list chn-a chn-b)
+                                                                 :sample-type :float))
+         (mixer (audio-blender::make-mixer 'test chn-o chn-g)))
     (start chn-o)
     (unwind-protect
-         (loop for a-size = (audio-blender::refresh chn-a (audio-blender::buffer-size chn-a))
-               for b-size = (audio-blender::refresh chn-b (audio-blender::buffer-size chn-a))
-               until (and (= 0 a-size) (= 0 b-size))
-               do (funcall mixer (max a-size b-size))
-                  (audio-blender::refresh chn-o (max a-size b-size)))
+         (loop for r = (audio-blender::refresh chn-g (audio-blender::buffer-size chn-g))
+               until (and (= 0 r))
+               do (funcall mixer r)
+                  (audio-blender::refresh chn-o r))
       (disconnect chn-o)
       (disconnect chn-a)
       (disconnect chn-b))))
