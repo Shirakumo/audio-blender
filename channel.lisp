@@ -98,17 +98,19 @@
                   summing (/ (sample channel i) length))))))
 
 (defmethod refresh ((aggregate aggregate-channel) max)
-  (loop for channel across (channels aggregate)
-        for size = (refresh channel max)
-        do (when (< size max)
-             ;; Backfill with zeros.
-             (loop with zero = (ctype-zero (sample-type channel))
-                   for i from size below max
-                   do (setf (sample channel i) zero))
-             ;; Remove from channels.
-             (remove-channel channel aggregate)))
-  (mix aggregate)
-  max)
+  (case (length (channels aggregate))
+    (0 0)
+    (T (loop for channel across (channels aggregate)
+             for size = (refresh channel max)
+             do (when (< size max)
+                  ;; Backfill with zeros.
+                  (loop with zero = (ctype-zero (sample-type channel))
+                        for i from size below max
+                        do (setf (sample channel i) zero))
+                  ;; Remove from channels.
+                  (remove-channel channel aggregate)))
+     (mix aggregate)
+     max)))
 
 (defmethod remove-channel ((channel channel) (aggregate aggregate-channel))
   (setf (channels aggregate) (remove channel (channels aggregate)))
