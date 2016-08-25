@@ -11,6 +11,9 @@
 (defun enlist (a &rest vals)
   (if (listp a) a (list* a vals)))
 
+(defun delist (a &optional (key #'first))
+  (if (listp a) (funcall key a) a))
+
 (defun mixer (name &optional (error T))
   (or (gethash name *mixers*)
       (when error (error "No such mixer ~s." name))))
@@ -22,28 +25,31 @@
   (remhash name *mixers*))
 
 (defun make-mixer (name out &rest channels)
-  (apply (mixer name) (enlist out) (mapcar #'enlist channels)))
+  (apply (mixer name) out channels))
 
 (defmacro with-mixer ((name out &rest channels) &body body)
   `(let ((,name (make-mixer ',name ,out ,@channels)))
      ,@body))
 
-(defmacro define-mixer (name (out &rest channels) &body body)
+(defun make-mixer-lambda (out channels extra-vars body)
   (let ((size (gensym "SIZE"))
         (i (gensym "I")))
+    `(lambda (,size ,@extra-vars)
+       (declare (type fixnum ,size))
+       (dotimes (,i ,size ,out)
+         (let ,(loop for (var chan) in channels
+                     collect `(,var ,(sample chan i)))
+           ,(setf (sample out i)
+                  `(progn ,@body)))))))
+
+(defmacro define-mixer (name channels extra-vars &body body)
+  (let ((out (gensym "OUT")))
     `(progn (setf (mixer ',name)
                   (lambda (,out ,@channels)
-                    (let ,(loop for chan in (cons out channels)
-                                ;; For now we discard the extra information.
-                                collect `(,chan (first ,chan)))
-                      (compile NIL
-                               (print
-                                `(lambda (,',size)
-                                   (declare (type fixnum ,',size))
-                                   (dotimes (,',i ,',size ,,out)
-                                     (let ,(list
-                                            ,@(loop for chan in channels
-                                                    collect `(list ',chan (sample ,chan ',i))))
-                                       ,(setf (sample ,out ',i)
-                                              `(progn ,@',body))))))))))
+                    (compile NIL (make-mixer-lambda
+                                  ,out
+                                  (list ,@(loop for chan in channels
+                                                collect `(list ',chan ,chan)))
+                                  ',extra-vars
+                                  ',body))))
             ',name)))

@@ -53,7 +53,9 @@
 
 (defmethod initialize-instance :after ((channel c-array-channel) &key buffer buffer-size)
   (unless buffer
-    (let ((buffer (cffi:foreign-alloc :unsigned-char :count buffer-size :initial-element 0)))
+    (let ((buffer (cffi:foreign-alloc (sample-type channel)
+                                      :count buffer-size
+                                      :initial-element (ctype-zero (sample-type channel)))))
       (setf (slot-value channel 'buffer) buffer)
       (tg:finalize channel (lambda () (cffi:foreign-free buffer))))))
 

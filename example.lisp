@@ -10,8 +10,8 @@
   (:use #:cl))
 (in-package #:org.shirakumo.fraf.audio-blender.example)
 
-(audio-blender::define-mixer test (out a b)
-  a)
+(audio-blender::define-mixer test (a b) (vol)
+  (audio-blender::amp vol a))
 
 (defclass mpg-channel (audio-blender::channel)
   ((file :accessor file))
@@ -26,13 +26,18 @@
   (cl-mpg123:buffer (file channel)))
 
 (defmethod audio-blender::buffer-size ((channel mpg-channel))
-  (cl-mpg123:buffer-size (file channel)))
+  (/ (cl-mpg123:buffer-size (file channel))
+     (cffi:foreign-type-size (audio-blender::sample-type channel))))
 
 (defmethod audio-blender::refresh ((channel mpg-channel) max)
-  (handler-bind ((cl-mpg123:read-failed (lambda (err)
-                                          (when (eql (cl-mpg123:error-code err) :done)
-                                            (return-from audio-blender::refresh 0)))))
-    (cl-mpg123:read-directly (file channel) (audio-blender::buffer channel) max)))
+  (let ((size (cffi:foreign-type-size (audio-blender::sample-type channel))))
+    (declare (type fixnum size max))
+    (handler-bind ((cl-mpg123:read-failed (lambda (err)
+                                            (when (eql (cl-mpg123:error-code err) :done)
+                                              (return-from audio-blender::refresh 0)))))
+      (/ (cl-mpg123:read-directly (file channel) (audio-blender::buffer channel)
+                                  (* max size))
+         size))))
 
 (defmethod audio-blender::sample ((channel mpg-channel) pos)
   `(cffi:mem-aref ,(audio-blender::buffer channel) ,(audio-blender::sample-type channel) ,pos))
@@ -50,7 +55,8 @@
                           (cl-out123:make-output driver :rate 44100 :channels 2 :encoding (audio-blender::sample-type channel)))))
 
 (defmethod audio-blender::refresh ((channel out-channel) max)
-  (cl-out123:play (output channel) (audio-blender::buffer channel) max))
+  (cl-out123:play (output channel) (audio-blender::buffer channel)
+                  (* max (cffi:foreign-type-size (audio-blender::sample-type channel)))))
 
 (defmethod (setf audio-blender::sample) (sample (channel out-channel) pos)
   `(setf (cffi:mem-aref ,(audio-blender::buffer channel) ,(audio-blender::sample-type channel) ,pos)
@@ -68,15 +74,13 @@
          (chn-o (make-instance 'out-channel :driver output-driver
                                             :buffer-size (audio-blender::buffer-size chn-a)))
          (mixer (audio-blender::make-mixer 'test chn-o chn-a chn-b)))
-    ;(start chn-o)
+    (start chn-o)
     (unwind-protect
          (loop for a-size = (audio-blender::refresh chn-a (audio-blender::buffer-size chn-a))
                for b-size = (audio-blender::refresh chn-b (audio-blender::buffer-size chn-a))
                until (and (= 0 a-size) (= 0 b-size))
                do (funcall mixer (max a-size b-size))
-                  (break)
-                  ;(audio-blender::refresh chn-o (max a-size b-size))
-                  (format T "~&Read ~a ~a" a-size b-size))
+                  (audio-blender::refresh chn-o (max a-size b-size)))
       (disconnect chn-o)
       (disconnect chn-a)
       (disconnect chn-b))))
