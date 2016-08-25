@@ -14,6 +14,7 @@
   :homepage "https://github.com/Shirakumo/audio-blender"
   :serial T
   :components ((:file "package")
+               (:file "dispatch")
                (:file "type-conversion")
                (:file "mixer-functions")
                (:file "channel")

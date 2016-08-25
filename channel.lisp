@@ -18,6 +18,7 @@
 (defgeneric float-sample (channel pos))
 (defgeneric (setf sample) (sample channel pos))
 (defgeneric (setf float-sample) (float channel pos))
+(define-dispatcher dsample (channel pos))
 
 (defmethod float-sample ((channel channel) pos)
   `(coerce-ctype ,(sample channel pos) ,(sample-type channel) :float))
@@ -60,12 +61,13 @@
       (tg:finalize channel (lambda () (cffi:foreign-free buffer))))))
 
 (defmethod sample ((channel c-array-channel) pos)
-  (declare (type fixnum pos) (optimize speed))
   `(cffi:mem-aref (the cffi:foreign-pointer ,(buffer channel)) ,(sample-type channel) ,pos))
 
 (defmethod (setf sample) (sample (channel c-array-channel) pos)
-  (declare (type fixnum pos))
   `(setf (cffi:mem-aref (the cffi:foreign-pointer ,(buffer channel)) ,(sample-type channel) ,pos) ,sample))
+
+(define-dispatch-method dsample c-array-channel (channel pos)
+  (cffi:mem-aref (the cffi:foreign-pointer (buffer channel)) (sample-type channel) pos))
 
 (defclass vector-channel (buffer-channel)
   ())
@@ -74,12 +76,13 @@
   (length (the vector (buffer channel))))
 
 (defmethod sample ((channel vector-channel) pos)
-  (declare (type fixnum pos))
   `(aref (the vector ,(buffer channel)) ,pos))
 
 (defmethod (setf sample) (sample (channel vector-channel) pos)
-  (declare (type fixnum pos))
   `(setf (aref (the vector ,(buffer channel)) ,pos) ,sample))
+
+(define-dispatch-method dsample c-array-channel (channel pos)
+  (aref (the vector (buffer channel)) pos))
 
 (defclass reading-channel (buffer-channel)
   ((reader :initarg :reader :reader reader))
@@ -101,6 +104,7 @@
    :buffer (make-array 0 :element-type 'single-float :initial-element 0.0s0 :adjustable T)))
 
 (defmethod initialize-instance :after ((aggregate aggregate-channel) &key channels)
+  (setf (channels aggregate) #())
   (dolist (channel channels)
     (add-channel channel aggregate)))
 
@@ -111,13 +115,13 @@
          (channels (channels aggregate)))
     (declare (type (vector single-float) buffer))
     (declare (type simple-vector channels))
-    (dolist (i max buffer)
+    (dotimes (i max buffer)
       (declare (type fixnum i))
       (setf (aref buffer i)
             (/ (let ((sum 0.0s0))
                  (declare (type single-float sum))
                  (dotimes (j (length channels) sum)
-                   (incf sum (sf! (sample (aref channels j) i)))))
+                   (incf sum (sf! (dsample (aref channels j) i)))))
                (coerce (length channels) 'single-float))))))
 
 (defmethod refresh ((aggregate aggregate-channel) max)

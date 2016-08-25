@@ -13,6 +13,9 @@
 (audio-blender::define-mixer test (a b) ()
   (audio-blender::mix/ a b))
 
+(audio-blender::define-mixer test2 (a) (vol)
+  (audio-blender::amp vol a))
+
 (defclass mpg-channel (audio-blender::channel)
   ((file :accessor file))
   (:default-initargs
@@ -41,6 +44,9 @@
 
 (defmethod audio-blender::sample ((channel mpg-channel) pos)
   `(cffi:mem-aref ,(audio-blender::buffer channel) ,(audio-blender::sample-type channel) ,pos))
+
+(audio-blender::define-dispatch-method audio-blender::dsample mpg-channel (channel pos)
+  (cffi:mem-aref (audio-blender::buffer channel) (audio-blender::sample-type channel) pos))
 
 (defmethod disconnect ((mpg mpg-channel))
   (cl-mpg123:disconnect (file mpg)))
@@ -81,9 +87,32 @@
                for b = (audio-blender::refresh chn-b (audio-blender::buffer-size chn-b))
                until (and (= 0 a) (= 0 b))
                do (funcall mixer (max a b))
-                  (format T "~& ~fs" (/ (- (get-internal-run-time) start)
+                  (format T "~& Mixing took ~fs" (/ (- (get-internal-run-time) start)
                                         internal-time-units-per-second))
                   (audio-blender::refresh chn-o (max a b)))
+      (disconnect chn-o)
+      (disconnect chn-a)
+      (disconnect chn-b))))
+
+(defun main-b (file-a file-b &key output-driver)
+  (let* ((chn-a (make-instance 'mpg-channel :path file-a))
+         (chn-b (make-instance 'mpg-channel :path file-b))
+         (chn-c (make-instance 'mpg-channel :path file-b))
+         (chn-d (make-instance 'mpg-channel :path file-b))
+         (chn-o (make-instance 'out-channel :driver output-driver
+                                            :buffer-size (audio-blender::buffer-size chn-a)))
+         (chn-g (make-instance 'audio-blender::aggregate-channel :channels (list chn-a chn-b chn-c chn-d)
+                                                                 :sample-type :float))
+         (mixer (audio-blender::make-mixer 'test2 chn-o chn-g)))
+    (start chn-o)
+    (unwind-protect
+         (loop for start = (get-internal-run-time)
+               for a = (audio-blender::refresh chn-g (audio-blender::buffer-size chn-g))
+               until (and (= 0 a))
+               do (funcall mixer a 0.1)
+                  (format T "~& Mixing took ~fs" (/ (- (get-internal-run-time) start)
+                                                    internal-time-units-per-second))
+                  (audio-blender::refresh chn-o a))
       (disconnect chn-o)
       (disconnect chn-a)
       (disconnect chn-b))))
