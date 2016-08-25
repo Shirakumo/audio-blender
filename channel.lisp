@@ -20,10 +20,10 @@
 (defgeneric (setf float-sample) (float channel pos))
 
 (defmethod float-sample ((channel channel) pos)
-  (coerce-ctype (sample channel pos) (sample-type channel) :float))
+  `(coerce-ctype ,(sample channel pos) ,(sample-type channel) :float))
 
 (defmethod (setf float-sample) (float (channel channel) pos)
-  (setf (sample channel pos) (coerce-ctype float :float (sample-type channel))))
+  `(setf (sample ,channel ,pos) (coerce-ctype ,float :float ,(sample-type channel))))
 
 (defclass buffer-channel (channel)
   ((buffer :initarg :buffer :reader buffer)
@@ -53,17 +53,17 @@
 
 (defmethod initialize-instance :after ((channel c-array-channel) &key buffer buffer-size)
   (unless buffer
-    (let ((buffer (cffi:foreign-alloc :unsigned-char :count buffer-size)))
+    (let ((buffer (cffi:foreign-alloc :unsigned-char :count buffer-size :initial-element 0)))
       (setf (slot-value channel 'buffer) buffer)
       (tg:finalize channel (lambda () (cffi:foreign-free buffer))))))
 
 (defmethod sample ((channel c-array-channel) pos)
   (declare (type fixnum pos) (optimize speed))
-  (cffi:mem-aref (the cffi:foreign-pointer (buffer channel)) (sample-type channel) pos))
+  `(cffi:mem-aref (the cffi:foreign-pointer ,(buffer channel)) ,(sample-type channel) ,pos))
 
 (defmethod (setf sample) (sample (channel c-array-channel) pos)
   (declare (type fixnum pos))
-  (setf (cffi:mem-aref (the cffi:foreign-pointer (buffer channel)) (sample-type channel) pos) sample))
+  `(setf (cffi:mem-aref (the cffi:foreign-pointer ,(buffer channel)) ,(sample-type channel) ,pos) ,sample))
 
 (defclass vector-channel (buffer-channel)
   ())
@@ -73,11 +73,11 @@
 
 (defmethod sample ((channel vector-channel) pos)
   (declare (type fixnum pos))
-  (aref (the vector (buffer channel)) pos))
+  `(aref (the vector ,(buffer channel)) ,pos))
 
 (defmethod (setf sample) (sample (channel vector-channel) pos)
   (declare (type fixnum pos))
-  (setf (aref (the vector (buffer channel)) pos) sample))
+  `(setf (aref (the vector ,(buffer channel)) ,pos) ,sample))
 
 (defclass reading-channel (buffer-channel)
   ((reader :initarg :reader :reader reader))
@@ -89,6 +89,9 @@
   (funcall (the function (reader channel))
            (buffer channel)
            (min max (the fixnum (buffer-size channel)))))
+
+(defclass c-array-reading-channel (c-array-channel reading-channel)
+  ())
 
 (defclass aggregate-channel (vector-channel)
   ((channels :accessor channels))

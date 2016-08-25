@@ -11,7 +11,7 @@
   :author "Nicolas Hafner <shinmera@tymoon.eu>"
   :maintainer "Nicolas Hafner <shinmera@tymoon.eu>"
   :description "Audio-blender allows you to mix and process raw audio samples."
-  :homepage "https://github.com/Shirakumo/cl-soundio"
+  :homepage "https://github.com/Shirakumo/audio-blender"
   :serial T
   :components ((:file "package")
                (:file "type-conversion")
