@@ -35,7 +35,7 @@
                      (typecase ,(first args)
                        ,@(loop for (type cargs . body) in cases
                                collect `(,type
-                                         (let ,(mapcar #'list args cargs)
+                                         (let ,(mapcar #'list cargs args)
                                            ,@body)))
                        (T (error "Cannot dispatch to ~s, not one of ~a." ,(first args) ',(mapcar #'first cases))))))
     function))
@@ -63,5 +63,6 @@
 (defmacro define-dispatch-method (name type args &body body)
   (let ((fun (gensym "FUN")))
     `(let ((,fun (dispatch-function ',name)))
-       (pushnew '(,type ,args ,@body) (cases ,fun) :key #'first)
+       (setf (cases ,fun) (cons '(,type ,args ,@body)
+                                (delete ',type (cases ,fun) :key #'first)))
        (compile-dispatch-function ,fun))))
