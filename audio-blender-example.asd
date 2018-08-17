@@ -11,7 +11,9 @@
   :author "Nicolas Hafner <shinmera@tymoon.eu>"
   :maintainer "Nicolas Hafner <shinmera@tymoon.eu>"
   :description "Example application for the audio-blender using cl-mpg123 and cl-out123."
-  :homepage "https://github.com/Shirakumo/audio-blender"
+  :homepage "https://Shirakumo.github.io/audio-blender/"
+  :bug-tracker "https://github.com/Shirakumo/audio-blender/issues"
+  :source-control (:git "https://github.com/Shirakumo/audio-blender.git")
   :serial T
   :components ((:file "example"))
   :depends-on (:audio-blender
